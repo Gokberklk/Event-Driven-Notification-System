@@ -14,11 +14,14 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/notification-system/notification-system/api"
 	"github.com/notification-system/notification-system/internal/config"
 	"github.com/notification-system/notification-system/internal/database"
 	"github.com/notification-system/notification-system/internal/health"
 	"github.com/notification-system/notification-system/internal/httpx"
 	"github.com/notification-system/notification-system/internal/logger"
+	"github.com/notification-system/notification-system/internal/notification"
+	"github.com/notification-system/notification-system/internal/queue"
 )
 
 func main() {
@@ -45,6 +48,11 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer, httpx.CorrelationID, httpx.RequestLogger(log))
 	r.Method(http.MethodGet, "/health", health.Handler{DB: db, Redis: rdb})
+	r.Get("/openapi.yaml", api.Spec)
+	r.Get("/docs", api.Docs)
+
+	svc := notification.NewService(notification.NewRepository(db), queue.New(rdb), log, cfg.MaxAttempts)
+	r.Route("/api/v1", notification.NewHandler(svc, log).Routes)
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r, ReadHeaderTimeout: 5 * time.Second}
 	go func() {

@@ -1,0 +1,278 @@
+openapi: 3.0.3
+info:
+  title: Notification Service API
+  version: 1.0.0
+  description: |
+    Event-driven notification system that delivers SMS, Email and Push messages
+    asynchronously with priority queues, per-channel rate limiting and retries.
+
+    Every response carries an `X-Correlation-ID` header. Send your own to trace a
+    request through the API and the workers.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: notifications
+  - name: batches
+  - name: ops
+paths:
+  /api/v1/notifications:
+    post:
+      tags: [notifications]
+      summary: Create a notification
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRequest' }
+            example:
+              recipient: "+905551234567"
+              channel: sms
+              content: Your order has shipped!
+              priority: high
+      responses:
+        '201':
+          description: Created and queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+        '200':
+          description: Idempotency key matched an existing notification; it is returned unchanged
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    get:
+      tags: [notifications]
+      summary: List notifications
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/Status' } }
+        - { name: channel, in: query, schema: { $ref: '#/components/schemas/Channel' } }
+        - { name: batchId, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, description: Created at or after (RFC3339), schema: { type: string, format: date-time } }
+        - { name: to, in: query, description: Created before (RFC3339), schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: A page of notifications, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Page' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /api/v1/notifications/batch:
+    post:
+      tags: [batches]
+      summary: Create up to 1000 notifications in one request
+      description: All items are validated first; if any item is invalid nothing is created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [notifications]
+              properties:
+                notifications:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { $ref: '#/components/schemas/CreateRequest' }
+      responses:
+        '201':
+          description: Batch created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /api/v1/notifications/{id}:
+    get:
+      tags: [notifications]
+      summary: Get a notification by ID
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: The notification
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/notifications/{id}/cancel:
+    post:
+      tags: [notifications]
+      summary: Cancel a pending or scheduled notification
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Already processing, sent, failed or cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/v1/batches/{id}:
+    get:
+      tags: [batches]
+      summary: Get batch status counts
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200':
+          description: Status counts for the batch
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchStatus' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /health:
+    get:
+      tags: [ops]
+      summary: Health check (PostgreSQL and Redis)
+      responses:
+        '200': { description: Healthy }
+        '503': { description: A dependency is unavailable }
+  /metrics:
+    get:
+      tags: [ops]
+      summary: Real-time metrics (queue depth, success/failure rates, latency)
+      responses:
+        '200':
+          description: Metrics snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Metrics' }
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: Requests with the same key return the original notification instead of creating a duplicate.
+      schema: { type: string, maxLength: 255 }
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: Malformed JSON or path parameter
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationFailed:
+      description: One or more fields are invalid
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: validation failed
+            details:
+              content: exceeds 160 characters for sms (got 171)
+  schemas:
+    Channel:
+      type: string
+      enum: [sms, email, push]
+    Priority:
+      type: string
+      enum: [high, normal, low]
+      default: normal
+    Status:
+      type: string
+      enum: [pending, scheduled, processing, sent, failed, cancelled]
+    CreateRequest:
+      type: object
+      required: [recipient, channel, content]
+      properties:
+        recipient:
+          type: string
+          description: E.164 phone for sms, email address for email, device token for push
+        channel: { $ref: '#/components/schemas/Channel' }
+        content:
+          type: string
+          description: "Max length: sms 160, push 256, email 10000 characters"
+        priority: { $ref: '#/components/schemas/Priority' }
+        idempotencyKey: { type: string, maxLength: 255 }
+        scheduledAt:
+          type: string
+          format: date-time
+          description: Deliver at this time instead of immediately
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        batchId: { type: string, format: uuid }
+        idempotencyKey: { type: string }
+        recipient: { type: string }
+        channel: { $ref: '#/components/schemas/Channel' }
+        content: { type: string }
+        priority: { $ref: '#/components/schemas/Priority' }
+        status: { $ref: '#/components/schemas/Status' }
+        attempts: { type: integer }
+        maxAttempts: { type: integer }
+        lastError: { type: string }
+        providerMessageId: { type: string }
+        correlationId: { type: string }
+        scheduledAt: { type: string, format: date-time }
+        nextAttemptAt: { type: string, format: date-time }
+        sentAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Page:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    BatchResult:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        count: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+    BatchStatus:
+      type: object
+      properties:
+        batchId: { type: string, format: uuid }
+        total: { type: integer }
+        counts:
+          type: object
+          additionalProperties: { type: integer }
+    Metrics:
+      type: object
+      properties:
+        queueDepth:
+          type: object
+          additionalProperties: { type: integer }
+        delayed: { type: integer }
+        channels:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              sent: { type: integer }
+              failed: { type: integer }
+              retried: { type: integer }
+              successRate: { type: number }
+              avgLatencyMs: { type: number }
+              p95LatencyMs: { type: number }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        details: {}
