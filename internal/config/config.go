@@ -24,7 +24,7 @@ func Load() Config {
 		HTTPAddr:        env("HTTP_ADDR", ":8080"),
 		DatabaseURL:     env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/notifications?sslmode=disable"),
 		RedisAddr:       env("REDIS_ADDR", "localhost:6379"),
-		ProviderURL:     env("PROVIDER_URL", "https://webhook.site/your-uuid"),
+		ProviderURL:     env("PROVIDER_URL", "https://webhook.site/a5b6ad94-fd0a-4a9c-b9a0-67169c8556f2"),
 		ProviderTimeout: envDuration("PROVIDER_TIMEOUT", 5*time.Second),
 		RateLimitPerSec: envInt("RATE_LIMIT_PER_SEC", 100),
 		WorkerCount:     envInt("WORKER_COUNT", 10),

@@ -26,7 +26,7 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/notifications?sslmode=disable
       REDIS_ADDR: redis:6379
       # Values below can be overridden from a .env file next to this compose file.
-      PROVIDER_URL: ${PROVIDER_URL:-https://webhook.site/your-uuid}
+      PROVIDER_URL: ${PROVIDER_URL:-https://webhook.site/a5b6ad94-fd0a-4a9c-b9a0-67169c8556f2}
       RATE_LIMIT_PER_SEC: ${RATE_LIMIT_PER_SEC:-100}
       WORKER_COUNT: ${WORKER_COUNT:-10}
       MAX_ATTEMPTS: ${MAX_ATTEMPTS:-5}

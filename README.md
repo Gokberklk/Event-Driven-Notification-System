@@ -8,10 +8,17 @@ retries with exponential backoff, and real-time observability.
 ## Quick start
 
 ```bash
-# Optional: point the workers at your own webhook.site URL
-echo "PROVIDER_URL=https://webhook.site/<your-uuid>" > .env
-
 docker compose up --build
+```
+
+It works out of the box: the default `PROVIDER_URL` points at a webhook.site
+URL that is already configured to answer `202`. You can watch requests arrive at
+https://webhook.site/#!/view/a5b6ad94-fd0a-4a9c-b9a0-67169c8556f2
+
+To use your own URL instead:
+
+```bash
+echo "PROVIDER_URL=https://webhook.site/<your-uuid>" > .env
 ```
 
 | URL | What |
@@ -21,7 +28,7 @@ docker compose up --build
 | http://localhost:8080/health | Health check (PostgreSQL + Redis) |
 | http://localhost:8080/metrics | Queue depth, success/failure rates, latency |
 
-To set up the provider, open https://webhook.site (it creates a unique URL for
+To set up your own provider URL, open https://webhook.site (it creates a unique URL for
 you), click **Edit** at the top, and set:
 
 * **Default status code:** `202`
@@ -172,7 +179,7 @@ Validation errors return `422` with per-field details:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PROVIDER_URL` | `https://webhook.site/your-uuid` | Provider endpoint |
+| `PROVIDER_URL` | preconfigured webhook.site URL | Provider endpoint |
 | `PROVIDER_TIMEOUT` | `5s` | Per-request timeout |
 | `RATE_LIMIT_PER_SEC` | `100` | Messages per second, per channel |
 | `WORKER_COUNT` | `10` | Consumers per channel, per worker process |
