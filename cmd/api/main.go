@@ -20,6 +20,7 @@ import (
 	"github.com/notification-system/notification-system/internal/health"
 	"github.com/notification-system/notification-system/internal/httpx"
 	"github.com/notification-system/notification-system/internal/logger"
+	"github.com/notification-system/notification-system/internal/metrics"
 	"github.com/notification-system/notification-system/internal/notification"
 	"github.com/notification-system/notification-system/internal/queue"
 )
@@ -51,7 +52,14 @@ func main() {
 	r.Get("/openapi.yaml", api.Spec)
 	r.Get("/docs", api.Docs)
 
-	svc := notification.NewService(notification.NewRepository(db), queue.New(rdb), log, cfg.MaxAttempts)
+	q := queue.New(rdb)
+	channels := make([]string, len(notification.Channels))
+	for i, c := range notification.Channels {
+		channels[i] = string(c)
+	}
+	r.Method(http.MethodGet, "/metrics", metrics.Handler{Recorder: metrics.New(rdb), Queue: q, Channels: channels})
+
+	svc := notification.NewService(notification.NewRepository(db), q, log, cfg.MaxAttempts)
 	r.Route("/api/v1", notification.NewHandler(svc, log).Routes)
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r, ReadHeaderTimeout: 5 * time.Second}
