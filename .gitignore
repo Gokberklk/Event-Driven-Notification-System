@@ -35,3 +35,6 @@ go.work.sum
 
 # Build output
 /bin/
+
+# Local-only compose overrides
+docker-compose.override.yml
