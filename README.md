@@ -21,8 +21,15 @@ docker compose up --build
 | http://localhost:8080/health | Health check (PostgreSQL + Redis) |
 | http://localhost:8080/metrics | Queue depth, success/failure rates, latency |
 
-Configure webhook.site to respond with status **202** and body
-`{"messageId": "$request.uuid$", "status": "accepted", "timestamp": "$request.date$"}`.
+To set up the provider, open https://webhook.site (it creates a unique URL for
+you), click **Edit** at the top, and set:
+
+* **Default status code:** `202`
+* **Content type:** `application/json`
+* **Response body:**
+  `{"messageId": "6f1c2a9e-0000-4000-8000-000000000001", "status": "accepted", "timestamp": "2026-01-01T00:00:00Z"}`
+
+The worker stores `messageId` on the notification as `providerMessageId`.
 
 ## Architecture
 
