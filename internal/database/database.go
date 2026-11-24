@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5" // pgx5:// driver
@@ -14,8 +15,43 @@ import (
 	"github.com/Gokberklk/Event-Driven-Notification-System/migrations"
 )
 
-// Connect opens a pgx connection pool and verifies connectivity.
+// startupTimeout bounds how long services wait for PostgreSQL on boot. In
+// container environments DNS and the database can take a few seconds to
+// become reachable even after the health check passes.
+const startupTimeout = 60 * time.Second
+
+// retry runs fn until it succeeds, ctx is done or startupTimeout elapses.
+func retry(ctx context.Context, fn func() error) error {
+	deadline := time.Now().Add(startupTimeout)
+	delay := 500 * time.Millisecond
+	for {
+		err := fn()
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(delay):
+		}
+		if delay < 5*time.Second {
+			delay *= 2
+		}
+	}
+}
+
+// Connect opens a pgx connection pool, retrying until PostgreSQL is reachable.
 func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
+	var pool *pgxpool.Pool
+	err := retry(ctx, func() error {
+		var err error
+		pool, err = connectOnce(ctx, url)
+		return err
+	})
+	return pool, err
+}
+
+func connectOnce(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
@@ -27,8 +63,13 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-// Migrate applies all pending up-migrations embedded in the binary.
-func Migrate(url string) error {
+// Migrate applies all pending up-migrations embedded in the binary,
+// retrying while the database is not yet reachable.
+func Migrate(ctx context.Context, url string) error {
+	return retry(ctx, func() error { return migrateOnce(url) })
+}
+
+func migrateOnce(url string) error {
 	src, err := iofs.New(migrations.FS, ".")
 	if err != nil {
 		return fmt.Errorf("load migrations: %w", err)

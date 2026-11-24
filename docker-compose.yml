@@ -32,6 +32,7 @@ services:
       MAX_ATTEMPTS: ${MAX_ATTEMPTS:-5}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports: ["8080:8080"]
+    restart: on-failure
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

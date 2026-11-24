@@ -32,7 +32,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := database.Migrate(cfg.DatabaseURL); err != nil {
+	if err := database.Migrate(ctx, cfg.DatabaseURL); err != nil {
 		log.Error("migrations failed", "error", err)
 		os.Exit(1)
 	}

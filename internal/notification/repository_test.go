@@ -18,7 +18,7 @@ func testRepo(t *testing.T) *Repository {
 	if url == "" {
 		t.Skip("TEST_DATABASE_URL not set")
 	}
-	if err := database.Migrate(url); err != nil {
+	if err := database.Migrate(context.Background(), url); err != nil {
 		t.Fatal(err)
 	}
 	db, err := database.Connect(context.Background(), url)
