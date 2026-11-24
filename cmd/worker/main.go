@@ -9,15 +9,15 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/notification-system/notification-system/internal/config"
-	"github.com/notification-system/notification-system/internal/database"
-	"github.com/notification-system/notification-system/internal/logger"
-	"github.com/notification-system/notification-system/internal/metrics"
-	"github.com/notification-system/notification-system/internal/notification"
-	"github.com/notification-system/notification-system/internal/provider"
-	"github.com/notification-system/notification-system/internal/queue"
-	"github.com/notification-system/notification-system/internal/ratelimit"
-	"github.com/notification-system/notification-system/internal/worker"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/config"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/database"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/metrics"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/notification"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/provider"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/ratelimit"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/worker"
 )
 
 func main() {

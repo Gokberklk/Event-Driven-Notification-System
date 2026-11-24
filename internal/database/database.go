@@ -11,7 +11,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/notification-system/notification-system/migrations"
+	"github.com/Gokberklk/Event-Driven-Notification-System/migrations"
 )
 
 // Connect opens a pgx connection pool and verifies connectivity.

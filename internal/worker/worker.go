@@ -13,10 +13,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/notification-system/notification-system/internal/logger"
-	"github.com/notification-system/notification-system/internal/notification"
-	"github.com/notification-system/notification-system/internal/provider"
-	"github.com/notification-system/notification-system/internal/queue"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/notification"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/provider"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
 )
 
 // Store is the persistence contract the worker needs.

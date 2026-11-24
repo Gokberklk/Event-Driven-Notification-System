@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/notification-system/notification-system/internal/logger"
-	"github.com/notification-system/notification-system/internal/queue"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
 )
 
 // Enqueuer is the subset of the queue the service needs.

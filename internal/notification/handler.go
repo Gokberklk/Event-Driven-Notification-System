@@ -12,8 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/notification-system/notification-system/internal/httpx"
-	"github.com/notification-system/notification-system/internal/logger"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/httpx"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
 )
 
 const (

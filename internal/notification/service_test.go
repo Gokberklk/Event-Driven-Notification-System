@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/notification-system/notification-system/internal/queue"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
 )
 
 type fakeStore struct {

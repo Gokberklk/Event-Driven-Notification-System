@@ -21,11 +21,16 @@ services:
 
   api:
     build: .
-    command: ["api"]
-    env_file: .env
-    environment:
+    command: ["/api"]
+    environment: &app-env
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/notifications?sslmode=disable
       REDIS_ADDR: redis:6379
+      # Values below can be overridden from a .env file next to this compose file.
+      PROVIDER_URL: ${PROVIDER_URL:-https://webhook.site/your-uuid}
+      RATE_LIMIT_PER_SEC: ${RATE_LIMIT_PER_SEC:-100}
+      WORKER_COUNT: ${WORKER_COUNT:-10}
+      MAX_ATTEMPTS: ${MAX_ATTEMPTS:-5}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports: ["8080:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -33,10 +38,9 @@ services:
 
   worker:
     build: .
-    command: ["worker"]
-    env_file: .env
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/notifications?sslmode=disable
-      REDIS_ADDR: redis:6379
+    command: ["/worker"]
+    environment: *app-env
+    extra_hosts: ["host.docker.internal:host-gateway"]
     depends_on:
       api: { condition: service_started }
+    restart: on-failure

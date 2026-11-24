@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/notification-system/notification-system/internal/database"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/database"
 )
 
 // Integration tests run against a real PostgreSQL when TEST_DATABASE_URL is set

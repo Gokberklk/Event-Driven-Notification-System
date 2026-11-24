@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/notification-system/notification-system/internal/httpx"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/httpx"
 )
 
 type Handler struct {

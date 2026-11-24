@@ -14,15 +14,15 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/notification-system/notification-system/api"
-	"github.com/notification-system/notification-system/internal/config"
-	"github.com/notification-system/notification-system/internal/database"
-	"github.com/notification-system/notification-system/internal/health"
-	"github.com/notification-system/notification-system/internal/httpx"
-	"github.com/notification-system/notification-system/internal/logger"
-	"github.com/notification-system/notification-system/internal/metrics"
-	"github.com/notification-system/notification-system/internal/notification"
-	"github.com/notification-system/notification-system/internal/queue"
+	"github.com/Gokberklk/Event-Driven-Notification-System/api"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/config"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/database"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/health"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/httpx"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/metrics"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/notification"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
 )
 
 func main() {

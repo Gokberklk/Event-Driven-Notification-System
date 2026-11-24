@@ -1,4 +1,4 @@
-module github.com/notification-system/notification-system
+module github.com/Gokberklk/Event-Driven-Notification-System
 
 go 1.24.7
 

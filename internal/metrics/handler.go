@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/notification-system/notification-system/internal/httpx"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/httpx"
 )
 
 // DepthReader reports queue depth.

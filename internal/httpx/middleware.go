@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/notification-system/notification-system/internal/logger"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
 )
 
 const CorrelationHeader = "X-Correlation-ID"
