@@ -308,5 +308,13 @@ migrations/        versioned schema
 * **WebSocket delivery is best effort.** Events go through Redis Pub/Sub, so
   a client that is disconnected misses them; it can catch up with
   `GET /notifications/{id}` or `/batches/{id}`. A Redis Stream would allow replay.
-* **Possible additions:**
-  OpenTelemetry tracing, Prometheus exposition format, per-tenant rate limits.
+* **Possible additions:** Prometheus exposition format, per-tenant rate
+  limits, Redis Streams for replayable WebSocket events.
+
+## Development process
+
+I used Claude (Anthropic's AI assistant) as a pair-programming tool while
+building this project. We discussed the requirements, agreed on the
+architecture and trade-offs described above, and wrote and tested the code
+together; commits it contributed to carry a `Co-Authored-By` trailer. I
+reviewed the design decisions and can walk through any part of the system.
