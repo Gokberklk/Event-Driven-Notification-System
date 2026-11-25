@@ -19,6 +19,14 @@ services:
       interval: 2s
       retries: 20
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4318:4318"   # OTLP over HTTP
+
   api:
     build: .
     command: ["/api"]
@@ -31,11 +39,14 @@ services:
       WORKER_COUNT: ${WORKER_COUNT:-10}
       MAX_ATTEMPTS: ${MAX_ATTEMPTS:-5}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Distributed tracing. Remove to disable; the app runs fine without Jaeger.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
     ports: ["8080:8080"]
     restart: on-failure
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      jaeger: { condition: service_started }
 
   worker:
     build: .

@@ -13,6 +13,10 @@ import (
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/template"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/tracing"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // Enqueuer is the subset of the queue the service needs.
@@ -138,8 +142,19 @@ func (s *Service) CreateBatch(ctx context.Context, reqs []CreateRequest) (BatchR
 	return out, nil
 }
 
-func (s *Service) persistAndEnqueue(ctx context.Context, reqs []CreateRequest, batchID *uuid.UUID) ([]InsertResult, error) {
+func (s *Service) persistAndEnqueue(ctx context.Context, reqs []CreateRequest, batchID *uuid.UUID) (_ []InsertResult, err error) {
+	ctx, span := tracing.Tracer().Start(ctx, "notification.persist_and_enqueue")
+	span.SetAttributes(attribute.Int("notification.count", len(reqs)))
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	cid := logger.CorrelationID(ctx)
+	traceParent := tracing.Inject(ctx)
 	ns := make([]Notification, len(reqs))
 	for i, r := range reqs {
 		n := Notification{
@@ -160,6 +175,9 @@ func (s *Service) persistAndEnqueue(ctx context.Context, reqs []CreateRequest, b
 		}
 		if cid != "" {
 			n.CorrelationID = &cid
+		}
+		if traceParent != "" {
+			n.TraceParent = &traceParent
 		}
 		if r.ScheduledAt != nil && r.ScheduledAt.After(s.now()) {
 			n.Status = StatusScheduled

@@ -86,6 +86,7 @@ type Notification struct {
 	LastError         *string    `json:"lastError,omitempty"`
 	ProviderMessageID *string    `json:"providerMessageId,omitempty"`
 	TemplateID        *uuid.UUID `json:"templateId,omitempty"`
+	TraceParent       *string    `json:"-"`
 	CorrelationID     *string    `json:"correlationId,omitempty"`
 	ScheduledAt       *time.Time `json:"scheduledAt,omitempty"`
 	NextAttemptAt     *time.Time `json:"nextAttemptAt,omitempty"`

@@ -18,6 +18,11 @@ import (
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/notification"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/provider"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/tracing"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Store is the persistence contract the worker needs.
@@ -159,6 +164,21 @@ func (w *Worker) Process(ctx context.Context, rawID string) {
 		return
 	}
 
+	// Continue the trace started by the API request that created this
+	// notification, so one trace shows API -> queue -> worker -> provider.
+	if n.TraceParent != nil {
+		ctx = tracing.Extract(ctx, *n.TraceParent)
+	}
+	ctx, span := tracing.Tracer().Start(ctx, "notification.deliver",
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			attribute.String("notification.id", n.ID.String()),
+			attribute.String("notification.channel", string(n.Channel)),
+			attribute.String("notification.priority", string(n.Priority)),
+			attribute.Int("notification.attempt", n.Attempts),
+		))
+	defer span.End()
+
 	cid := ""
 	if n.CorrelationID != nil {
 		cid = *n.CorrelationID
@@ -167,7 +187,11 @@ func (w *Worker) Process(ctx context.Context, rawID string) {
 		With("notification_id", n.ID, "channel", n.Channel, "attempt", n.Attempts)
 	w.events.Publish(ctx, notification.StatusEvent(n, notification.StatusProcessing, ""))
 
-	if err := w.limiter.Wait(ctx, string(n.Channel)); err != nil {
+	waitCtx, waitSpan := tracing.Tracer().Start(ctx, "ratelimit.wait")
+	err = w.limiter.Wait(waitCtx, string(n.Channel))
+	waitSpan.End()
+	if err != nil {
+		span.SetAttributes(attribute.String("notification.outcome", "retry"))
 		w.retry(ctx, log, n, "rate limiter unavailable: "+err.Error())
 		return
 	}
@@ -179,6 +203,8 @@ func (w *Worker) Process(ctx context.Context, rawID string) {
 	latency := time.Since(start)
 
 	if err == nil {
+		span.SetAttributes(attribute.String("notification.outcome", "sent"),
+			attribute.String("provider.message_id", resp.MessageID))
 		if err := w.store.MarkSent(ctx, n.ID, resp.MessageID); err != nil {
 			log.Error("mark sent failed", "error", err)
 		}
@@ -188,10 +214,14 @@ func (w *Worker) Process(ctx context.Context, rawID string) {
 		return
 	}
 
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
 	if !provider.IsRetryable(err) {
+		span.SetAttributes(attribute.String("notification.outcome", "failed"))
 		w.fail(ctx, log, n, err.Error())
 		return
 	}
+	span.SetAttributes(attribute.String("notification.outcome", "retry"))
 	w.retry(ctx, log, n, err.Error())
 }
 

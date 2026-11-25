@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/config"
@@ -18,6 +19,7 @@ import (
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/provider"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/ratelimit"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/tracing"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/worker"
 )
 
@@ -28,6 +30,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	shutdownTracing, err := tracing.Init(ctx, "notification-worker")
+	if err != nil {
+		log.Error("tracing init failed", "error", err)
+		os.Exit(1)
+	}
+	defer func() { _ = shutdownTracing(context.Background()) }()
+
 	db, err := database.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		log.Error("database connection failed", "error", err)
@@ -37,6 +46,9 @@ func main() {
 
 	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
 	defer rdb.Close()
+	if err := redisotel.InstrumentTracing(rdb); err != nil {
+		log.Warn("redis tracing disabled", "error", err)
+	}
 
 	w := worker.New(
 		worker.DefaultConfig(cfg.WorkerCount),

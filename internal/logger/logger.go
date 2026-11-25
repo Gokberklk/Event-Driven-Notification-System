@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type ctxKey struct{}
@@ -38,9 +40,14 @@ func CorrelationID(ctx context.Context) string {
 }
 
 // FromContext returns a logger enriched with the context's correlation ID.
+// When a trace is active its trace_id is added too, linking logs to traces.
 func FromContext(ctx context.Context, base *slog.Logger) *slog.Logger {
+	l := base
 	if id := CorrelationID(ctx); id != "" {
-		return base.With("correlation_id", id)
+		l = l.With("correlation_id", id)
 	}
-	return base
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		l = l.With("trace_id", sc.TraceID().String())
+	}
+	return l
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Gokberklk/Event-Driven-Notification-System/api"
@@ -25,6 +26,7 @@ import (
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/notification"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/template"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/tracing"
 )
 
 func main() {
@@ -33,6 +35,13 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	shutdownTracing, err := tracing.Init(ctx, "notification-api")
+	if err != nil {
+		log.Error("tracing init failed", "error", err)
+		os.Exit(1)
+	}
+	defer func() { _ = shutdownTracing(context.Background()) }()
 
 	if err := database.Migrate(ctx, cfg.DatabaseURL); err != nil {
 		log.Error("migrations failed", "error", err)
@@ -47,9 +56,12 @@ func main() {
 
 	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
 	defer rdb.Close()
+	if err := redisotel.InstrumentTracing(rdb); err != nil {
+		log.Warn("redis tracing disabled", "error", err)
+	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.Recoverer, httpx.CorrelationID, httpx.RequestLogger(log))
+	r.Use(middleware.Recoverer, httpx.Tracing, httpx.CorrelationID, httpx.RequestLogger(log))
 	r.Method(http.MethodGet, "/health", health.Handler{DB: db, Redis: rdb})
 	r.Get("/openapi.yaml", api.Spec)
 	r.Get("/docs", api.Docs)

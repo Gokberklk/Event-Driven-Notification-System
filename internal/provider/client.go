@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type Request struct {
@@ -55,7 +57,9 @@ type Client struct {
 }
 
 func NewClient(url string, timeout time.Duration) *Client {
-	return &Client{url: url, http: &http.Client{Timeout: timeout}}
+	// otelhttp creates a client span per call and injects the traceparent
+	// header, so a tracing-aware provider could join the same trace.
+	return &Client{url: url, http: &http.Client{Timeout: timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)}}
 }
 
 // Send posts one message. idempotencyKey lets the provider de-duplicate

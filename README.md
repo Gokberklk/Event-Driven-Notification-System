@@ -29,6 +29,7 @@ echo "PROVIDER_URL=https://webhook.site/<your-uuid>" > .env
 | http://localhost:8080/metrics | Queue depth, success/failure rates, latency |
 | http://localhost:8080/live | Live status page (WebSocket demo) |
 | ws://localhost:8080/ws | WebSocket stream of status changes |
+| http://localhost:16686 | Jaeger UI (distributed traces) |
 
 To set up your own provider URL, open https://webhook.site (it creates a unique URL for
 you), click **Edit** at the top, and set:
@@ -39,6 +40,23 @@ you), click **Edit** at the top, and set:
   `{"messageId": "6f1c2a9e-0000-4000-8000-000000000001", "status": "accepted", "timestamp": "2026-01-01T00:00:00Z"}`
 
 The worker stores `messageId` on the notification as `providerMessageId`.
+
+## Requirements coverage
+
+| Requirement | Where |
+| --- | --- |
+| Create / batch (≤1000) / query by ID or batch / cancel / list with filters + pagination | `internal/notification` |
+| Async queue workers, priorities (high/normal/low) | `internal/queue`, `internal/worker` |
+| Rate limit 100 msg/s per channel | `internal/ratelimit` |
+| Content validation, idempotency | `internal/notification/model.go`, partial unique index |
+| Delivery & retry logic (candidate design) | [Key design decisions](#key-design-decisions) |
+| Metrics, structured logs with correlation IDs, health check | `/metrics`, `internal/logger`, `/health` |
+| **Bonus:** failure handling (backoff, dead-letter, crash recovery) | `internal/worker` |
+| **Bonus:** scheduled notifications | `scheduledAt` |
+| **Bonus:** template system | `internal/template`, `/api/v1/templates` |
+| **Bonus:** WebSocket status updates | `/ws`, `/live` |
+| **Bonus:** distributed tracing | OpenTelemetry + Jaeger, `internal/tracing` |
+| **Bonus:** GitHub Actions CI | `.github/workflows/ci.yml` |
 
 ## Architecture
 
@@ -135,6 +153,17 @@ updates work no matter which worker processed the message or how many API
 instances run. Slow clients drop events instead of blocking others, and
 ping/pong detects dead connections.
 
+**Distributed tracing.** OpenTelemetry spans cover HTTP requests, every SQL
+query (otelpgx), every Redis command (redisotel), and the provider call
+(otelhttp, which also forwards a `traceparent` header). The trace context is
+stored on the notification row (`trace_parent`), so the worker continues the
+*same* trace after the queue hop. One trace in Jaeger therefore shows the full
+path: `POST /notifications → INSERT → ZADD → notification.deliver →
+ratelimit.wait → HTTP POST provider → UPDATE sent`, including every retry
+attempt. Logs carry the `trace_id`, so a log line leads straight to its trace.
+Tracing is on when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (Compose points it at
+Jaeger) and a no-op otherwise.
+
 ## API examples
 
 Create a notification:
@@ -224,6 +253,7 @@ Validation errors return `422` with per-field details:
 | `REDIS_ADDR` | `localhost:6379` | |
 | `HTTP_ADDR` | `:8080` | API listen address |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Compose: `http://jaeger:4318` | OTLP/HTTP collector; unset disables tracing |
 
 ## Tests
 
@@ -261,6 +291,7 @@ internal/provider  provider HTTP client
 internal/ratelimit distributed per-channel limiter
 internal/metrics   Redis-backed metrics + /metrics handler
 internal/events    status events (Redis Pub/Sub) + WebSocket hub
+internal/tracing   OpenTelemetry setup and trace propagation
 internal/template  message templates
 internal/...       config, logging, health, http helpers, database
 migrations/        versioned schema
