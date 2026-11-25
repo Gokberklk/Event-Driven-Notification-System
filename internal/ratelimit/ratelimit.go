@@ -57,3 +57,9 @@ func (l *Limiter) Wait(ctx context.Context, channel string) error {
 		}
 	}
 }
+
+// Preload loads the Lua script into Redis so the first call uses EVALSHA
+// directly instead of failing with NOSCRIPT and falling back to EVAL.
+func (l *Limiter) Preload(ctx context.Context) error {
+	return allowScript.Load(ctx, l.rdb).Err()
+}

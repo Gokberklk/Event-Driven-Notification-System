@@ -133,3 +133,8 @@ func decodeDelayed(m string) (Item, error) {
 	}
 	return Item{Channel: parts[0], Rank: rank, ID: parts[2]}, nil
 }
+
+// Preload loads the promote script into Redis (see ratelimit.Preload).
+func (q *Queue) Preload(ctx context.Context) error {
+	return promoteScript.Load(ctx, q.rdb).Err()
+}

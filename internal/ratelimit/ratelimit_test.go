@@ -33,3 +33,16 @@ func TestAllowPerChannelPerSecond(t *testing.T) {
 		t.Fatal("budget must reset in the next second")
 	}
 }
+
+func TestPreloadAvoidsNoScript(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	l := New(rdb, 10)
+	if err := l.Preload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	exists, err := rdb.ScriptExists(context.Background(), allowScript.Hash()).Result()
+	if err != nil || !exists[0] {
+		t.Fatalf("script not loaded: %v %v", exists, err)
+	}
+}

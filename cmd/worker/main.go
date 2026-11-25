@@ -50,12 +50,22 @@ func main() {
 		log.Warn("redis tracing disabled", "error", err)
 	}
 
+	q := queue.New(rdb)
+	limiter := ratelimit.New(rdb, cfg.RateLimitPerSec)
+	// Load Lua scripts up front so the first EVALSHA does not return NOSCRIPT
+	// (harmless, but it shows up as an error span in traces).
+	for _, preload := range []func(context.Context) error{q.Preload, limiter.Preload} {
+		if err := preload(ctx); err != nil {
+			log.Warn("preload redis script failed", "error", err)
+		}
+	}
+
 	w := worker.New(
 		worker.DefaultConfig(cfg.WorkerCount),
 		notification.NewRepository(db),
-		queue.New(rdb),
+		q,
 		provider.NewClient(cfg.ProviderURL, cfg.ProviderTimeout),
-		ratelimit.New(rdb, cfg.RateLimitPerSec),
+		limiter,
 		metrics.New(rdb),
 		log,
 	).WithEvents(events.NewRedisPublisher(rdb, log))
