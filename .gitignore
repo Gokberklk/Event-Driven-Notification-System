@@ -38,3 +38,6 @@ go.work.sum
 
 # Local-only compose overrides
 docker-compose.override.yml
+
+# Local Redis snapshots
+dump.rdb
