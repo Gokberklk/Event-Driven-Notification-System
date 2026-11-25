@@ -9,6 +9,9 @@ import (
 //go:embed openapi.yaml
 var spec []byte
 
+//go:embed live.html
+var liveHTML []byte
+
 const swaggerHTML = `<!doctype html>
 <html><head><meta charset="utf-8"><title>Notification API</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css"></head>
@@ -27,4 +30,10 @@ func Spec(w http.ResponseWriter, _ *http.Request) {
 func Docs(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(swaggerHTML))
+}
+
+// Live serves a small page that streams /ws status events.
+func Live(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(liveHTML)
 }

@@ -196,6 +196,27 @@ paths:
       responses:
         '200': { description: Healthy }
         '503': { description: A dependency is unavailable }
+  /ws:
+    get:
+      tags: [ops]
+      summary: WebSocket stream of real-time status updates
+      description: |
+        Upgrade to a WebSocket (`ws://localhost:8080/ws`) to receive a JSON message
+        every time a notification changes status (pending, scheduled, processing,
+        sent, failed, cancelled). Filter with `notificationId` or `batchId`.
+        A browser demo is served at `/live`.
+
+        Example message:
+        ```json
+        {"type":"notification.status","notificationId":"…","batchId":"…","channel":"sms",
+         "status":"sent","attempts":1,"correlationId":"…","timestamp":"2026-01-01T00:00:00Z"}
+        ```
+      parameters:
+        - { name: notificationId, in: query, schema: { type: string, format: uuid } }
+        - { name: batchId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '101': { description: Switching protocols }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /metrics:
     get:
       tags: [ops]

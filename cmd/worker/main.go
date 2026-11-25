@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/config"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/database"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/events"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/metrics"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/notification"
@@ -45,7 +46,7 @@ func main() {
 		ratelimit.New(rdb, cfg.RateLimitPerSec),
 		metrics.New(rdb),
 		log,
-	)
+	).WithEvents(events.NewRedisPublisher(rdb, log))
 	log.Info("worker started", "workers_per_channel", cfg.WorkerCount, "rate_limit_per_sec", cfg.RateLimitPerSec)
 	w.Run(ctx)
 	log.Info("worker stopped")

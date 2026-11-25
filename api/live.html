@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Notification Status</title>
+<style>
+  :root { --bg:#f7f7f8; --fg:#1d1d1f; --muted:#6b6b72; --card:#fff; --line:#e3e3e6;
+          --pending:#8a8a92; --processing:#2f6fde; --sent:#1f9d55; --failed:#d64545; --cancelled:#a36b00; --scheduled:#7a4fd6; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#151517; --fg:#ececef; --muted:#9a9aa3; --card:#1f1f23; --line:#2e2e34; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width:960px; margin:0 auto; padding:24px 16px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 16px; }
+  form, .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; }
+  form { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input, select, button { font:inherit; padding:6px 10px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  input { flex:1 1 240px; min-width:0; }
+  button { cursor:pointer; }
+  .status { font-weight:600; }
+  #state { font-size:12px; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td.id { font-family:ui-monospace, monospace; font-size:12px; }
+  .wrap { overflow-x:auto; }
+  .s-pending{color:var(--pending)} .s-processing{color:var(--processing)} .s-sent{color:var(--sent)}
+  .s-failed{color:var(--failed)} .s-cancelled{color:var(--cancelled)} .s-scheduled{color:var(--scheduled)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Live notification status</h1>
+  <p class="sub">Streams <code>/ws</code> events. Leave the filter empty to see everything, or paste a notification or batch ID.</p>
+  <form id="f">
+    <select id="kind"><option value="">All</option><option value="notificationId">Notification ID</option><option value="batchId">Batch ID</option></select>
+    <input id="val" placeholder="UUID (optional)">
+    <button>Connect</button>
+    <button type="button" id="send">Send test SMS</button>
+    <span id="state">disconnected</span>
+  </form>
+  <div class="panel wrap">
+    <table>
+      <thead><tr><th>Time</th><th>Notification</th><th>Channel</th><th>Status</th><th>Attempt</th><th>Error</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+<script>
+let ws;
+const $ = (id) => document.getElementById(id);
+function connect(e) {
+  if (e) e.preventDefault();
+  if (ws) ws.close();
+  const k = $('kind').value, v = $('val').value.trim();
+  const q = k && v ? '?' + k + '=' + encodeURIComponent(v) : '';
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws' + q);
+  ws.onopen = () => $('state').textContent = 'connected' + (q ? ' (' + k + ')' : '');
+  ws.onclose = () => $('state').textContent = 'disconnected';
+  ws.onmessage = (m) => {
+    const ev = JSON.parse(m.data), tr = document.createElement('tr');
+    const cells = [new Date(ev.timestamp).toLocaleTimeString(), ev.notificationId, ev.channel, ev.status, ev.attempts, ev.error || ''];
+    cells.forEach((c, i) => { const td = document.createElement('td'); td.textContent = c;
+      if (i === 1) td.className = 'id'; if (i === 3) td.className = 'status s-' + ev.status; tr.appendChild(td); });
+    $('rows').prepend(tr);
+    while ($('rows').children.length > 200) $('rows').lastChild.remove();
+  };
+}
+$('f').addEventListener('submit', connect);
+$('send').addEventListener('click', () => fetch('/api/v1/notifications', { method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ recipient: '+905551234567', channel: 'sms', content: 'Live demo ' + new Date().toLocaleTimeString(), priority: 'high' }) }));
+connect();
+</script>
+</body>
+</html>

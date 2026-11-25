@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/events"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/template"
@@ -37,13 +38,20 @@ type Service struct {
 	store       Store
 	queue       Enqueuer
 	templates   TemplateGetter
+	events      events.Publisher
 	log         *slog.Logger
 	maxAttempts int
 	now         func() time.Time
 }
 
 func NewService(store Store, q Enqueuer, templates TemplateGetter, log *slog.Logger, maxAttempts int) *Service {
-	return &Service{store: store, queue: q, templates: templates, log: log, maxAttempts: maxAttempts, now: time.Now}
+	return &Service{store: store, queue: q, templates: templates, events: events.Nop{}, log: log, maxAttempts: maxAttempts, now: time.Now}
+}
+
+// WithEvents enables publishing of status-change events.
+func (s *Service) WithEvents(p events.Publisher) *Service {
+	s.events = p
+	return s
 }
 
 // BatchResult is returned from batch creation.
@@ -174,6 +182,7 @@ func (s *Service) persistAndEnqueue(ctx context.Context, reqs []CreateRequest, b
 			continue
 		}
 		n := r.Notification
+		s.events.Publish(ctx, StatusEvent(n, n.Status, ""))
 		it := queue.Item{ID: n.ID.String(), Channel: string(n.Channel), Priority: string(n.Priority), Rank: n.Priority.Rank()}
 		if n.ScheduledAt != nil && n.ScheduledAt.After(now) {
 			if err := s.queue.Enqueue(ctx, []queue.Item{it}, *n.ScheduledAt); err != nil {
@@ -248,7 +257,11 @@ func (s *Service) GetBatch(ctx context.Context, id uuid.UUID) (BatchStatus, erro
 }
 
 func (s *Service) Cancel(ctx context.Context, id uuid.UUID) (Notification, error) {
-	return s.store.Cancel(ctx, id)
+	n, err := s.store.Cancel(ctx, id)
+	if err == nil {
+		s.events.Publish(ctx, StatusEvent(n, n.Status, ""))
+	}
+	return n, err
 }
 
 func (s *Service) List(ctx context.Context, f ListFilter) (Page, error) {

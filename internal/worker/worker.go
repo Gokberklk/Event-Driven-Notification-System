@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/events"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/notification"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/provider"
@@ -78,11 +79,18 @@ type Worker struct {
 	sender  Sender
 	limiter Limiter
 	metrics Metrics
+	events  events.Publisher
 	log     *slog.Logger
 }
 
 func New(cfg Config, s Store, q Queue, snd Sender, l Limiter, m Metrics, log *slog.Logger) *Worker {
-	return &Worker{cfg: cfg, store: s, queue: q, sender: snd, limiter: l, metrics: m, log: log}
+	return &Worker{cfg: cfg, store: s, queue: q, sender: snd, limiter: l, metrics: m, events: events.Nop{}, log: log}
+}
+
+// WithEvents enables publishing of status-change events.
+func (w *Worker) WithEvents(p events.Publisher) *Worker {
+	w.events = p
+	return w
 }
 
 // Run starts consumers for every channel plus the promoter and reconciler
@@ -157,6 +165,7 @@ func (w *Worker) Process(ctx context.Context, rawID string) {
 	}
 	log := logger.FromContext(logger.WithCorrelationID(ctx, cid), w.log).
 		With("notification_id", n.ID, "channel", n.Channel, "attempt", n.Attempts)
+	w.events.Publish(ctx, notification.StatusEvent(n, notification.StatusProcessing, ""))
 
 	if err := w.limiter.Wait(ctx, string(n.Channel)); err != nil {
 		w.retry(ctx, log, n, "rate limiter unavailable: "+err.Error())
@@ -174,6 +183,7 @@ func (w *Worker) Process(ctx context.Context, rawID string) {
 			log.Error("mark sent failed", "error", err)
 		}
 		w.metrics.Sent(ctx, string(n.Channel), latency)
+		w.events.Publish(ctx, notification.StatusEvent(n, notification.StatusSent, ""))
 		log.Info("notification sent", "provider_message_id", resp.MessageID, "latency_ms", latency.Milliseconds())
 		return
 	}
@@ -201,6 +211,7 @@ func (w *Worker) retry(ctx context.Context, log *slog.Logger, n notification.Not
 		log.Warn("re-enqueue failed, reconciler will pick it up", "error", err)
 	}
 	w.metrics.Retried(ctx, string(n.Channel))
+	w.events.Publish(ctx, notification.StatusEvent(n, notification.StatusPending, reason))
 	log.Warn("delivery failed, will retry", "reason", reason, "retry_in", delay.String())
 }
 
@@ -209,6 +220,7 @@ func (w *Worker) fail(ctx context.Context, log *slog.Logger, n notification.Noti
 		log.Error("mark failed failed", "error", err)
 	}
 	w.metrics.Failed(ctx, string(n.Channel))
+	w.events.Publish(ctx, notification.StatusEvent(n, notification.StatusFailed, reason))
 	log.Error("delivery failed permanently", "reason", reason)
 }
 

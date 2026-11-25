@@ -17,6 +17,7 @@ import (
 	"github.com/Gokberklk/Event-Driven-Notification-System/api"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/config"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/database"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/events"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/health"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/httpx"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
@@ -61,7 +62,13 @@ func main() {
 	r.Method(http.MethodGet, "/metrics", metrics.Handler{Recorder: metrics.New(rdb), Queue: q, Channels: channels})
 
 	templates := template.NewRepository(db)
-	svc := notification.NewService(notification.NewRepository(db), q, templates, log, cfg.MaxAttempts)
+	svc := notification.NewService(notification.NewRepository(db), q, templates, log, cfg.MaxAttempts).
+		WithEvents(events.NewRedisPublisher(rdb, log))
+
+	hub := events.NewHub(rdb, log)
+	go hub.Run(ctx)
+	r.Handle("/ws", hub)
+	r.Get("/live", api.Live)
 	r.Route("/api/v1", func(r chi.Router) {
 		notification.NewHandler(svc, log).Routes(r)
 		template.NewHandler(templates, log).Routes(r)

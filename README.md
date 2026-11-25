@@ -27,6 +27,8 @@ echo "PROVIDER_URL=https://webhook.site/<your-uuid>" > .env
 | http://localhost:8080/openapi.yaml | OpenAPI 3 spec |
 | http://localhost:8080/health | Health check (PostgreSQL + Redis) |
 | http://localhost:8080/metrics | Queue depth, success/failure rates, latency |
+| http://localhost:8080/live | Live status page (WebSocket demo) |
+| ws://localhost:8080/ws | WebSocket stream of status changes |
 
 To set up your own provider URL, open https://webhook.site (it creates a unique URL for
 you), click **Edit** at the top, and set:
@@ -126,6 +128,13 @@ more than 60 s and re-queues them.
 notification, so worker logs and the provider request carry the same ID as
 the original API call.
 
+**Real-time updates.** The API and workers publish every status change to a
+Redis Pub/Sub channel. Each API instance holds one subscription and fans
+events out to its WebSocket clients, filtered by notification or batch ID, so
+updates work no matter which worker processed the message or how many API
+instances run. Slow clients drop events instead of blocking others, and
+ping/pong detects dead connections.
+
 ## API examples
 
 Create a notification:
@@ -161,6 +170,15 @@ Templates are rendered when the notification is created, so the stored
 content is exactly what was sent even if the template is later deleted, and
 the length limit is checked against the final text. Batches can mix templated
 and plain items; each template is loaded once per batch.
+
+Watch status changes in real time (bonus). Open http://localhost:8080/live, or
+connect any WebSocket client; filter with `?notificationId=` or `?batchId=`:
+
+```bash
+websocat 'ws://localhost:8080/ws?batchId=<batch-id>'
+# {"type":"notification.status","notificationId":"…","status":"processing","attempts":1,…}
+# {"type":"notification.status","notificationId":"…","status":"sent","attempts":1,…}
+```
 
 Create a batch (up to 1000, validated all-or-nothing):
 
@@ -242,6 +260,8 @@ internal/worker    delivery loop, retries, reconciler
 internal/provider  provider HTTP client
 internal/ratelimit distributed per-channel limiter
 internal/metrics   Redis-backed metrics + /metrics handler
+internal/events    status events (Redis Pub/Sub) + WebSocket hub
+internal/template  message templates
 internal/...       config, logging, health, http helpers, database
 migrations/        versioned schema
 ```
@@ -254,5 +274,8 @@ migrations/        versioned schema
   durability and replay.
 * **Offset pagination** is simple and supports `total`. For very large tables,
   keyset pagination on `(created_at, id)` (already indexed) would be faster.
-* **Possible additions:** WebSocket status updates,
+* **WebSocket delivery is best effort.** Events go through Redis Pub/Sub, so
+  a client that is disconnected misses them; it can catch up with
+  `GET /notifications/{id}` or `/batches/{id}`. A Redis Stream would allow replay.
+* **Possible additions:**
   OpenTelemetry tracing, Prometheus exposition format, per-tenant rate limits.
