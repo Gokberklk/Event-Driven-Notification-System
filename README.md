@@ -144,6 +144,24 @@ curl -X POST localhost:8080/api/v1/notifications \
   -d '{"recipient":"user@example.com","channel":"email","content":"Flash sale starts now!","scheduledAt":"2030-01-01T09:00:00Z"}'
 ```
 
+Use a template (bonus): create it once, then send with variables. The channel
+defaults to the template's channel; missing variables return `422`.
+
+```bash
+curl -X POST localhost:8080/api/v1/templates \
+  -d '{"name":"order-shipped","channel":"sms","body":"Hi {{name}}, your order {{orderId}} has shipped!"}'
+# -> {"id":"<template-id>", "variables":["name","orderId"], ...}
+
+curl -X POST localhost:8080/api/v1/notifications \
+  -d '{"recipient":"+905551234567","templateId":"<template-id>","variables":{"name":"Ayşe","orderId":"A-42"}}'
+# -> content: "Hi Ayşe, your order A-42 has shipped!"
+```
+
+Templates are rendered when the notification is created, so the stored
+content is exactly what was sent even if the template is later deleted, and
+the length limit is checked against the final text. Batches can mix templated
+and plain items; each template is loaded once per batch.
+
 Create a batch (up to 1000, validated all-or-nothing):
 
 ```bash
@@ -199,8 +217,9 @@ make test-integration   # also runs repository tests against PostgreSQL from doc
 Covered: validation rules, idempotent create, batch validation, priority
 ordering, delayed promotion, rate limit windows, provider error
 classification, retry/backoff/give-up logic, skip-on-cancel, metrics
-aggregation, and the SQL repository (idempotent insert, exclusive claim,
-cancel rules, filters).
+aggregation, template parsing/rendering and template-based creation, and the
+SQL repositories (idempotent insert, exclusive claim, cancel rules, filters,
+template CRUD).
 
 CI (GitHub Actions) runs gofmt, `go vet`, golangci-lint, the full test suite
 against a PostgreSQL service container, and a Docker image build.
@@ -235,5 +254,5 @@ migrations/        versioned schema
   durability and replay.
 * **Offset pagination** is simple and supports `total`. For very large tables,
   keyset pagination on `(created_at, id)` (already indexed) would be faster.
-* **Possible additions:** message templates, WebSocket status updates,
+* **Possible additions:** WebSocket status updates,
   OpenTelemetry tracing, Prometheus exposition format, per-tenant rate limits.

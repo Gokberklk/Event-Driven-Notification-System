@@ -21,13 +21,13 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
 const columns = `id, batch_id, idempotency_key, recipient, channel, content, priority, status,
 	attempts, max_attempts, last_error, provider_message_id, correlation_id,
-	scheduled_at, next_attempt_at, sent_at, created_at, updated_at`
+	scheduled_at, next_attempt_at, sent_at, created_at, updated_at, template_id`
 
 func scan(row pgx.Row) (Notification, error) {
 	var n Notification
 	err := row.Scan(&n.ID, &n.BatchID, &n.IdempotencyKey, &n.Recipient, &n.Channel, &n.Content,
 		&n.Priority, &n.Status, &n.Attempts, &n.MaxAttempts, &n.LastError, &n.ProviderMessageID,
-		&n.CorrelationID, &n.ScheduledAt, &n.NextAttemptAt, &n.SentAt, &n.CreatedAt, &n.UpdatedAt)
+		&n.CorrelationID, &n.ScheduledAt, &n.NextAttemptAt, &n.SentAt, &n.CreatedAt, &n.UpdatedAt, &n.TemplateID)
 	return n, err
 }
 
@@ -52,12 +52,12 @@ func (r *Repository) InsertMany(ctx context.Context, ns []Notification) ([]Inser
 	for _, n := range ns {
 		batch.Queue(`INSERT INTO notifications
 			(id, batch_id, idempotency_key, recipient, channel, content, priority, status,
-			 max_attempts, correlation_id, scheduled_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			 max_attempts, correlation_id, scheduled_at, template_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 			ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
 			RETURNING `+columns,
 			n.ID, n.BatchID, n.IdempotencyKey, n.Recipient, n.Channel, n.Content, n.Priority,
-			n.Status, n.MaxAttempts, n.CorrelationID, n.ScheduledAt)
+			n.Status, n.MaxAttempts, n.CorrelationID, n.ScheduledAt, n.TemplateID)
 	}
 	br := tx.SendBatch(ctx, batch)
 	results := make([]InsertResult, len(ns))

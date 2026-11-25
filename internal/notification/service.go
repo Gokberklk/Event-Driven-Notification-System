@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strconv"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/logger"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/template"
 )
 
 // Enqueuer is the subset of the queue the service needs.
@@ -26,16 +28,22 @@ type Store interface {
 	Cancel(ctx context.Context, id uuid.UUID) (Notification, error)
 }
 
+// TemplateGetter loads stored message templates.
+type TemplateGetter interface {
+	Get(ctx context.Context, id uuid.UUID) (template.Template, error)
+}
+
 type Service struct {
 	store       Store
 	queue       Enqueuer
+	templates   TemplateGetter
 	log         *slog.Logger
 	maxAttempts int
 	now         func() time.Time
 }
 
-func NewService(store Store, q Enqueuer, log *slog.Logger, maxAttempts int) *Service {
-	return &Service{store: store, queue: q, log: log, maxAttempts: maxAttempts, now: time.Now}
+func NewService(store Store, q Enqueuer, templates TemplateGetter, log *slog.Logger, maxAttempts int) *Service {
+	return &Service{store: store, queue: q, templates: templates, log: log, maxAttempts: maxAttempts, now: time.Now}
 }
 
 // BatchResult is returned from batch creation.
@@ -56,6 +64,11 @@ type BatchStatus struct {
 // created=false means the idempotency key matched an existing notification.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Notification, bool, error) {
 	req.Normalize()
+	if fields, err := s.applyTemplate(ctx, &req, map[uuid.UUID]template.Template{}); err != nil {
+		return Notification{}, false, err
+	} else if len(fields) > 0 {
+		return Notification{}, false, &ValidationError{Fields: fields}
+	}
 	if err := req.Validate(s.now()); err != nil {
 		return Notification{}, false, err
 	}
@@ -76,8 +89,19 @@ func (s *Service) CreateBatch(ctx context.Context, reqs []CreateRequest) (BatchR
 	}
 	errs := map[string]string{}
 	seen := map[string]int{}
+	cache := map[uuid.UUID]template.Template{}
 	for i := range reqs {
 		reqs[i].Normalize()
+		fields, err := s.applyTemplate(ctx, &reqs[i], cache)
+		if err != nil {
+			return BatchResult{}, err
+		}
+		for k, v := range fields {
+			errs[itemField(i, k)] = v
+		}
+		if len(fields) > 0 {
+			continue
+		}
 		if err := reqs[i].Validate(s.now()); err != nil {
 			for k, v := range err.(*ValidationError).Fields {
 				errs[itemField(i, k)] = v
@@ -120,6 +144,7 @@ func (s *Service) persistAndEnqueue(ctx context.Context, reqs []CreateRequest, b
 			Status:      StatusPending,
 			MaxAttempts: s.maxAttempts,
 			ScheduledAt: r.ScheduledAt,
+			TemplateID:  r.TemplateID,
 		}
 		if r.IdempotencyKey != "" {
 			k := r.IdempotencyKey
@@ -162,6 +187,49 @@ func (s *Service) persistAndEnqueue(ctx context.Context, reqs []CreateRequest, b
 		logger.FromContext(ctx, s.log).Warn("enqueue failed, reconciler will retry", "count", len(immediate), "error", err)
 	}
 	return res, nil
+}
+
+// applyTemplate renders req.Content from req.TemplateID. It returns field
+// errors for invalid input, and a non-nil error only for infrastructure
+// failures. Templates are cached per call so a batch loads each one once.
+func (s *Service) applyTemplate(ctx context.Context, req *CreateRequest, cache map[uuid.UUID]template.Template) (map[string]string, error) {
+	if req.TemplateID == nil {
+		if len(req.Variables) > 0 {
+			return map[string]string{"variables": "only allowed together with templateId"}, nil
+		}
+		return nil, nil
+	}
+	if req.Content != "" {
+		return map[string]string{"content": "must be empty when templateId is set"}, nil
+	}
+	t, ok := cache[*req.TemplateID]
+	if !ok {
+		var err error
+		t, err = s.templates.Get(ctx, *req.TemplateID)
+		if errors.Is(err, template.ErrNotFound) {
+			return map[string]string{"templateId": "template not found"}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		cache[t.ID] = t
+	}
+	switch {
+	case req.Channel == "":
+		req.Channel = Channel(t.Channel)
+	case string(req.Channel) != t.Channel:
+		return map[string]string{"channel": "does not match template channel " + t.Channel}, nil
+	}
+	content, err := template.Render(t.Body, req.Variables)
+	if err != nil {
+		var ve *template.ValidationError
+		if errors.As(err, &ve) {
+			return ve.Fields, nil
+		}
+		return nil, err
+	}
+	req.Content = content
+	return nil, nil
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (Notification, error) {

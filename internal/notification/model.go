@@ -85,6 +85,7 @@ type Notification struct {
 	MaxAttempts       int        `json:"maxAttempts"`
 	LastError         *string    `json:"lastError,omitempty"`
 	ProviderMessageID *string    `json:"providerMessageId,omitempty"`
+	TemplateID        *uuid.UUID `json:"templateId,omitempty"`
 	CorrelationID     *string    `json:"correlationId,omitempty"`
 	ScheduledAt       *time.Time `json:"scheduledAt,omitempty"`
 	NextAttemptAt     *time.Time `json:"nextAttemptAt,omitempty"`
@@ -97,10 +98,15 @@ type Notification struct {
 type CreateRequest struct {
 	Recipient      string     `json:"recipient"`
 	Channel        Channel    `json:"channel"`
-	Content        string     `json:"content"`
+	Content        string     `json:"content,omitempty"`
 	Priority       Priority   `json:"priority,omitempty"`
 	IdempotencyKey string     `json:"idempotencyKey,omitempty"`
 	ScheduledAt    *time.Time `json:"scheduledAt,omitempty"`
+
+	// TemplateID renders Content from a stored template using Variables.
+	// Content must be empty when TemplateID is set.
+	TemplateID *uuid.UUID        `json:"templateId,omitempty"`
+	Variables  map[string]string `json:"variables,omitempty"`
 }
 
 // Content limits per channel (in characters).

@@ -23,6 +23,7 @@ import (
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/metrics"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/notification"
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/template"
 )
 
 func main() {
@@ -59,8 +60,12 @@ func main() {
 	}
 	r.Method(http.MethodGet, "/metrics", metrics.Handler{Recorder: metrics.New(rdb), Queue: q, Channels: channels})
 
-	svc := notification.NewService(notification.NewRepository(db), q, log, cfg.MaxAttempts)
-	r.Route("/api/v1", notification.NewHandler(svc, log).Routes)
+	templates := template.NewRepository(db)
+	svc := notification.NewService(notification.NewRepository(db), q, templates, log, cfg.MaxAttempts)
+	r.Route("/api/v1", func(r chi.Router) {
+		notification.NewHandler(svc, log).Routes(r)
+		template.NewHandler(templates, log).Routes(r)
+	})
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r, ReadHeaderTimeout: 5 * time.Second}
 	go func() {

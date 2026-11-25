@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Gokberklk/Event-Driven-Notification-System/internal/queue"
+	"github.com/Gokberklk/Event-Driven-Notification-System/internal/template"
 )
 
 type fakeStore struct {
@@ -60,7 +61,7 @@ func (q *fakeQueue) Enqueue(_ context.Context, items []queue.Item, runAt time.Ti
 func newTestService() (*Service, *fakeStore, *fakeQueue) {
 	st := &fakeStore{byKey: map[string]Notification{}}
 	q := &fakeQueue{}
-	return NewService(st, q, slog.New(slog.NewTextHandler(io.Discard, nil)), 5), st, q
+	return NewService(st, q, fakeTemplates{}, slog.New(slog.NewTextHandler(io.Discard, nil)), 5), st, q
 }
 
 func TestCreateIsIdempotent(t *testing.T) {
@@ -143,5 +144,77 @@ func TestCreateBatchSharesBatchID(t *testing.T) {
 	}
 	if len(q.calls) != 1 || len(q.calls[0].items) != 2 {
 		t.Fatalf("expected one enqueue call with 2 items, got %+v", q.calls)
+	}
+}
+
+var welcomeTemplateID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+
+type fakeTemplates struct{}
+
+func (fakeTemplates) Get(_ context.Context, id uuid.UUID) (template.Template, error) {
+	if id != welcomeTemplateID {
+		return template.Template{}, template.ErrNotFound
+	}
+	return template.Template{ID: id, Name: "welcome", Channel: "sms", Body: "Hi {{name}}, order {{orderId}} shipped"}, nil
+}
+
+func TestCreateFromTemplate(t *testing.T) {
+	svc, st, _ := newTestService()
+	id := welcomeTemplateID
+	n, _, err := svc.Create(context.Background(), CreateRequest{
+		Recipient: "+905551234567", TemplateID: &id,
+		Variables: map[string]string{"name": "Ayşe", "orderId": "A-42"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Content != "Hi Ayşe, order A-42 shipped" || n.Channel != ChannelSMS {
+		t.Fatalf("content=%q channel=%q", n.Content, n.Channel)
+	}
+	if st.inserted[0].TemplateID == nil || *st.inserted[0].TemplateID != id {
+		t.Fatal("template id must be stored on the notification")
+	}
+}
+
+func TestCreateFromTemplateErrors(t *testing.T) {
+	id, unknown := welcomeTemplateID, uuid.New()
+	tests := []struct {
+		name  string
+		req   CreateRequest
+		field string
+	}{
+		{"missing variable", CreateRequest{Recipient: "+905551234567", TemplateID: &id, Variables: map[string]string{"name": "x"}}, "variables"},
+		{"unknown template", CreateRequest{Recipient: "+905551234567", TemplateID: &unknown}, "templateId"},
+		{"channel mismatch", CreateRequest{Recipient: "a@b.com", Channel: "email", TemplateID: &id, Variables: map[string]string{"name": "x", "orderId": "y"}}, "channel"},
+		{"content and template", CreateRequest{Recipient: "+905551234567", Content: "hi", TemplateID: &id}, "content"},
+		{"variables without template", CreateRequest{Recipient: "+905551234567", Channel: "sms", Content: "hi", Variables: map[string]string{"a": "b"}}, "variables"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, _, _ := newTestService()
+			_, _, err := svc.Create(context.Background(), tt.req)
+			ve, ok := err.(*ValidationError)
+			if !ok {
+				t.Fatalf("want ValidationError, got %v", err)
+			}
+			if _, ok := ve.Fields[tt.field]; !ok {
+				t.Fatalf("want error on %q, got %v", tt.field, ve.Fields)
+			}
+		})
+	}
+}
+
+func TestBatchFromTemplateRendersEachItem(t *testing.T) {
+	svc, _, _ := newTestService()
+	id := welcomeTemplateID
+	res, err := svc.CreateBatch(context.Background(), []CreateRequest{
+		{Recipient: "+905551234567", TemplateID: &id, Variables: map[string]string{"name": "A", "orderId": "1"}},
+		{Recipient: "+905551234568", TemplateID: &id, Variables: map[string]string{"name": "B", "orderId": "2"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Items[0].Content != "Hi A, order 1 shipped" || res.Items[1].Content != "Hi B, order 2 shipped" {
+		t.Fatalf("got %q / %q", res.Items[0].Content, res.Items[1].Content)
 	}
 }
